@@ -13,6 +13,15 @@
       <p class="subtitle">Chat → Diagram → Code → Deploy</p>
     </header>
 
+    <!-- Auth Status Bar -->
+    <div id="auth-bar">
+      <span id="auth-status" class="disconnected">Checking...</span>
+      <div class="auth-actions">
+        <button id="connect-github" class="secondary">Connect GitHub</button>
+        <button id="disconnect-btn" class="secondary" style="display:none">Disconnect</button>
+      </div>
+    </div>
+
     <main>
       <section id="chat-section">
         <div id="messages"></div>

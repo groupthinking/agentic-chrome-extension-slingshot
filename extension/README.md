@@ -1,36 +1,33 @@
-# Agentic Builder — Chrome Extension Skeleton
+# Agentic Builder — Chrome Extension
 
-This is the starting point for the conversational AI Chrome extension.
+## Current Status (Issue #5 Implemented)
 
-## How to load (unpacked)
+- Secure token vault using `chrome.storage.local`
+- Auth status bar in the popup
+- Connect / Disconnect GitHub flow (Personal Access Token for now)
+- Clean message-passing architecture between popup and service worker
+- Ready for full OAuth upgrade later
 
-1. Open Chrome → `chrome://extensions`
+## How to load
+
+1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select this `extension/` folder
 
-## Current Status
+## Testing Auth
 
-- Basic UI shell (chat + diagram placeholder + action buttons)
-- Manifest V3 ready
-- Background service worker present
-- Voice + GitHub + Vercel buttons are stubs (see open issues)
+1. Click **Connect GitHub**
+2. Paste a GitHub Personal Access Token (needs `repo` scope)
+3. The status bar should turn green and show your username
+4. Click **Disconnect** to clear tokens
 
-## Next Steps (linked to Issues)
+> For production we will replace the prompt with a proper OAuth flow using `chrome.identity` + a GitHub OAuth App.
 
-1. Wire Grok API for the funnel (Issue #1)
-2. Add React Flow (Issue #2)
-3. Implement GitHub OAuth + commit (Issue #3)
-4. Implement Vercel deploy (Issue #4)
-5. Harden token storage (Issue #5)
+## Open Issues
 
-## Recommended Upgrade Path
-
-When ready for production React + React Flow:
-
-```bash
-npm create vite@latest . -- --template react
-npm install @xyflow/react
-```
-
-Then migrate the popup into a proper React app and update the build output path in `manifest.json`.
+- [#1](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/1) Chat / Voice Funneling
+- [#2](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/2) React Flow Diagram
+- [#3](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/3) GitHub OAuth + Auto Commit
+- [#4](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4) Vercel One-Click Deploy
+- [#5](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/5) Secure Token Vault ✅ (foundation done)

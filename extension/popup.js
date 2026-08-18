@@ -1,5 +1,4 @@
-// Basic popup logic (skeleton)
-// In production this will call Grok API + manage React Flow
+// Popup logic with Auth foundation (Issue #5)
 
 const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("user-input");
@@ -7,6 +6,9 @@ const sendBtn = document.getElementById("send-btn");
 const voiceBtn = document.getElementById("voice-btn");
 const commitBtn = document.getElementById("commit-btn");
 const deployBtn = document.getElementById("deploy-btn");
+const authStatusEl = document.getElementById("auth-status");
+const connectGithubBtn = document.getElementById("connect-github");
+const disconnectBtn = document.getElementById("disconnect-btn");
 
 function addMessage(role, text) {
   const div = document.createElement("div");
@@ -16,6 +18,89 @@ function addMessage(role, text) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+// ======================
+// AUTH LAYER
+// ======================
+async function refreshAuthStatus() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "GET_AUTH_STATUS" }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error(chrome.runtime.lastError);
+        resolve(null);
+        return;
+      }
+
+      if (response?.githubConnected) {
+        authStatusEl.textContent = `Connected as ${response.githubUser || "GitHub user"}`;
+        authStatusEl.className = "connected";
+        connectGithubBtn.style.display = "none";
+        disconnectBtn.style.display = "inline-block";
+        commitBtn.disabled = false;
+      } else {
+        authStatusEl.textContent = "Not connected";
+        authStatusEl.className = "disconnected";
+        connectGithubBtn.style.display = "inline-block";
+        disconnectBtn.style.display = "none";
+        commitBtn.disabled = true;
+      }
+
+      resolve(response);
+    });
+  });
+}
+
+// Simple token paste flow (for development)
+// In production this will be replaced by full OAuth using chrome.identity
+connectGithubBtn?.addEventListener("click", async () => {
+  const token = prompt(
+    "Paste a GitHub Personal Access Token (repo scope)\n\n" +
+    "Create one at: https://github.com/settings/tokens\n\n" +
+    "For production we will switch to full OAuth."
+  );
+
+  if (!token || !token.trim()) return;
+
+  // Optional: fetch user info
+  let user = null;
+  try {
+    const res = await fetch("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${token.trim()}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      user = data.login;
+    }
+  } catch (e) {
+    console.warn("Could not fetch GitHub user", e);
+  }
+
+  chrome.runtime.sendMessage(
+    {
+      type: "SAVE_GITHUB_TOKEN",
+      token: token.trim(),
+      user
+    },
+    async (response) => {
+      if (response?.success) {
+        addMessage("System", `GitHub connected${user ? " as @" + user : ""}`);
+        await refreshAuthStatus();
+      } else {
+        addMessage("System", "Failed to save token");
+      }
+    }
+  );
+});
+
+disconnectBtn?.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "DISCONNECT_ALL" }, async () => {
+    addMessage("System", "Disconnected from GitHub");
+    await refreshAuthStatus();
+  });
+});
+
+// ======================
+// CHAT (still skeleton)
+// ======================
 sendBtn.addEventListener("click", async () => {
   const text = inputEl.value.trim();
   if (!text) return;
@@ -23,32 +108,27 @@ sendBtn.addEventListener("click", async () => {
   addMessage("You", text);
   inputEl.value = "";
 
-  // TODO: Call Grok API here and funnel into agents
-  addMessage("System", "Generating agent plan... (skeleton)");
+  addMessage("System", "Generating agent plan... (Issue #1 not implemented yet)");
 
-  // Simulate success so buttons unlock
   setTimeout(() => {
-    addMessage("System", "Plan ready. You can now commit & deploy.");
-    commitBtn.disabled = false;
+    addMessage("System", "Plan ready (simulated).");
+    // Only enable deploy if we want, commit depends on auth
     deployBtn.disabled = false;
-  }, 1200);
+  }, 1000);
 });
 
 voiceBtn.addEventListener("click", () => {
-  if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-    addMessage("System", "Speech recognition not supported in this browser.");
-    return;
-  }
-  addMessage("System", "Voice input not fully wired yet (skeleton).");
+  addMessage("System", "Voice input coming in Issue #1");
 });
 
 commitBtn.addEventListener("click", () => {
-  addMessage("System", "GitHub commit flow not implemented yet (see Issue #3).");
+  addMessage("System", "GitHub commit flow → see Issue #3");
 });
 
 deployBtn.addEventListener("click", () => {
-  addMessage("System", "Vercel deploy flow not implemented yet (see Issue #4).");
+  addMessage("System", "Vercel deploy flow → see Issue #4");
 });
 
-// Initial message
-addMessage("System", "Ready. Describe the multi-agent system you want to build.");
+// Init
+addMessage("System", "Ready. Connect GitHub first (recommended), then describe your agent system.");
+refreshAuthStatus();
