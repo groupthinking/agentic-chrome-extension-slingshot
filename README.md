@@ -1,20 +1,35 @@
 # Agentic Chrome Extension — Slingshot Package
 
-Complete strategy package for building and launching a conversational AI Chrome extension that turns natural language into deployable multi-agent systems (React Flow diagrams + CrewAI + GitHub commits + one-click Vercel deploy).
+Complete strategy + code package for building a conversational AI Chrome extension that turns natural language into deployable multi-agent systems.
+
+**Live Repo:** https://github.com/groupthinking/agentic-chrome-extension-slingshot
 
 ## Package Structure
 
-| File | Section | Purpose |
-|------|---------|---------|
-| `01-DISCOVER.md` | Discover | Problem, personas, market, competitors, economic reality check |
-| `02-HOOK.md` | Hook | Value props, headlines, brand voice, viral loops |
-| `03-PLAN.md` | Plan (PRD) | Full product requirements, RICE prioritization, tech stack, roadmap |
-| `04-LAUNCH.md` | Launch Materials | Landing page, ads, scripts, email drip |
-| `05-SCALE.md` | Scale | Growth loops, analytics, automation, iteration cadence |
+| Path | Purpose |
+|------|---------|
+| `01-DISCOVER.md` | Problem, personas, market reality, economic risks |
+| `02-HOOK.md` | Value props, headlines, brand voice |
+| `03-PLAN.md` | PRD + RICE priorities |
+| `04-LAUNCH.md` | Landing page, ads, scripts |
+| `05-SCALE.md` | Growth loops & analytics |
+| `extension/` | **Working Chrome extension skeleton** |
 
-## Quick Start
-1. Read `01-DISCOVER.md` first for reality vs perception and key risks.
-2. Use `03-PLAN.md` as the working PRD.
-3. Execute the exact step-by-step infra in the original conversation for the MVP.
+## Open Issues (MVP)
 
-Repo created and packaged by Grok on 2026-07-24.
+- [#1 Chat / Voice Funneling](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/1)
+- [#2 React Flow Diagram](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/2)
+- [#3 GitHub OAuth + Commit](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/3)
+- [#4 Vercel One-Click Deploy](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4)
+- [#5 Secure Token Vault](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/5)
+
+## Quick Start — Extension
+
+1. Clone the repo
+2. Go to `chrome://extensions` → Developer mode → Load unpacked
+3. Select the `extension/` folder
+4. Open the popup and start typing
+
+## Philosophy
+
+Start with a working shell, then fill in the high-RICE features one by one. Security and auth first, then the fun parts.

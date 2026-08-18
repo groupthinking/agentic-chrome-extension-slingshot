@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Builder</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="root">
+    <header>
+      <h1>Agentic Builder</h1>
+      <p class="subtitle">Chat → Diagram → Code → Deploy</p>
+    </header>
+
+    <main>
+      <section id="chat-section">
+        <div id="messages"></div>
+        <div class="input-row">
+          <input type="text" id="user-input" placeholder="Describe the agent system you want..." />
+          <button id="send-btn">Send</button>
+          <button id="voice-btn" title="Voice input">🎙️</button>
+        </div>
+      </section>
+
+      <section id="diagram-section">
+        <h2>Agent Network</h2>
+        <div id="react-flow-placeholder">
+          <p>Diagram will appear here after the first plan is generated.</p>
+        </div>
+      </section>
+
+      <section id="actions">
+        <button id="commit-btn" disabled>Commit to GitHub</button>
+        <button id="deploy-btn" disabled>Deploy to Vercel</button>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
