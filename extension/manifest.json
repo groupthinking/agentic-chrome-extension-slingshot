@@ -12,8 +12,16 @@
   "host_permissions": [
     "https://api.x.ai/*",
     "https://api.github.com/*",
+    "https://github.com/*",
     "https://api.vercel.com/*"
   ],
+  "oauth2": {
+    "client_id": "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID",
+    "scopes": [
+      "repo",
+      "read:user"
+    ]
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Agentic Builder"
