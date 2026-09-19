@@ -7,6 +7,8 @@
 - Connect / Disconnect GitHub flow (Personal Access Token for now)
 - Text input funnel that calls Grok (xAI) and returns structured agent plans
 - Voice capture via Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`)
+- Live editable agent diagram in popup (drag nodes, create/reconnect/delete edges, rename nodes)
+- Diagram export as `JSON` and `Mermaid` (`.mmd`)
 - Clean message-passing architecture between popup and service worker
 - Ready for full OAuth upgrade later
 
@@ -37,6 +39,17 @@
    - a high-level workflow sequence
 4. Click **🎙️** to start voice capture, speak your prompt, then click **⏹️** to stop.
 5. Confirm transcript appears in input and can be sent through the same Grok funnel.
+
+## Testing Diagram Editing + Export
+
+1. Generate a plan using the chat input.
+2. Confirm nodes render for each agent and edges render for flow.
+3. Drag nodes to reposition them.
+4. Click **Connect: Off** to turn connect mode on, then click source node and target node to create an edge.
+5. Click an edge once to enter reconnect mode, select a new source node and target node.
+6. Double-click any edge to delete it.
+7. Double-click any node to rename it.
+8. Click **Export JSON** and **Export Mermaid** and confirm files download.
 
 ## Open Issues
 

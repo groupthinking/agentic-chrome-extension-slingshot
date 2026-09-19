@@ -34,7 +34,14 @@
 
       <section id="diagram-section">
         <h2>Agent Network</h2>
+        <div id="diagram-toolbar">
+          <button id="toggle-connect-btn" class="secondary">Connect: Off</button>
+          <button id="export-json-btn" class="secondary">Export JSON</button>
+          <button id="export-mermaid-btn" class="secondary">Export Mermaid</button>
+        </div>
         <div id="react-flow-placeholder">
+          <svg id="diagram-edges" aria-hidden="true"></svg>
+          <div id="diagram-nodes"></div>
           <p>Diagram will appear here after the first plan is generated.</p>
         </div>
       </section>
