@@ -19,6 +19,14 @@ Complete strategy + code package for building a conversational AI Chrome extensi
 
 ```text
 agentic-chrome-extension-slingshot/
+├── .github/
+│   └── skills/
+│       ├── code-review-agent/
+│       │   └── SKILL.md
+│       └── mcp-capability-negotiation/
+│           └── SKILL.md
+├── .vscode/
+│   └── mcp.json
 ├── 01-DISCOVER.md
 ├── 02-HOOK.md
 ├── 03-PLAN.md
@@ -37,11 +45,11 @@ agentic-chrome-extension-slingshot/
 ```mermaid
 flowchart TD
   U[User in Chrome Popup] --> P[popup.html + popup.js]
-  P --> S[chrome.storage.local]
   P --> B[background.js service worker]
+  B --> S[chrome.storage.local]
   B --> G[xAI API]
-  B --> GH[GitHub API]
-  B --> V[Vercel API]
+  P --> GH[GitHub API /user]
+  P -. planned .-> V[Vercel deploy integration]
   P --> D[Diagram + Export JSON/Mermaid]
 ```
 

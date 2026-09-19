@@ -23,7 +23,7 @@ agentic-chrome-extension-slingshot/
 flowchart LR
   User --> Popup["popup.js / popup.html"]
   Popup --> Background["background.js"]
-  Popup --> Storage["chrome.storage.local"]
+  Background --> Storage["chrome.storage.local"]
   Background --> XAI["xAI API"]
   Background --> GitHub["GitHub API"]
   Background --> Vercel["Vercel API"]
