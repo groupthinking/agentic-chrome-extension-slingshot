@@ -564,8 +564,8 @@ async function sendRuntimeMessage(message) {
 }
 
 async function ensureXaiToken() {
-  const tokenState = await sendRuntimeMessage({ type: "GET_TOKENS" });
-  if (tokenState?.xaiApiKey) return true;
+  const status = await sendRuntimeMessage({ type: "GET_XAI_STATUS" });
+  if (status?.hasXaiApiKey) return true;
 
   const key = prompt("Paste your xAI API key to enable Grok planning:");
   if (!key || !key.trim()) return false;
@@ -866,8 +866,13 @@ async function refreshAuthStatus() {
         ? `GitHub @${response.githubUser || "user"}`
         : "GitHub not connected";
       const vercelLabel = isVercelConnected ? "Vercel linked" : "Vercel not linked";
+      const refreshLabel = response?.githubTokenExpired
+        ? response?.githubTokenRefreshAvailable
+          ? " (token expired)"
+          : " (session expired)"
+        : "";
 
-      authStatusEl.textContent = `${githubLabel} • ${vercelLabel}`;
+      authStatusEl.textContent = `${githubLabel}${refreshLabel} • ${vercelLabel}`;
       authStatusEl.className = isGitHubConnected ? "connected" : "disconnected";
       connectGithubBtn.style.display = isGitHubConnected ? "none" : "inline-block";
       if (connectVercelBtn) {

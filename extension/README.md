@@ -5,6 +5,7 @@
 - Secure token vault using `chrome.storage.local`
 - Auth status bar in the popup
 - GitHub OAuth2 flow via `chrome.identity.launchWebAuthFlow` (PKCE)
+- GitHub OAuth access-token refresh handling for expiring user tokens
 - Text input funnel that calls Grok (xAI) and returns structured agent plans
 - Voice capture via Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`)
 - Live editable agent diagram in popup (drag nodes, create/reconnect/delete edges, rename nodes)
@@ -14,6 +15,7 @@
 - Deployment status polling with live URL feedback in the popup
 - Clear GitHub API error handling for 404, rate limits, and permission errors
 - Clean message-passing architecture between popup and service worker
+- Popup never reads raw stored tokens; it only requests capability/status flags from the service worker
 
 ## How to load
 
@@ -35,6 +37,7 @@
 2. Complete the OAuth consent flow.
 3. The status bar should turn green and show your username.
 4. Click **Disconnect** to clear stored credentials.
+5. If a GitHub token expires and includes a refresh token, the service worker refreshes it automatically.
 
 ## Testing Chat + Voice Funnel
 

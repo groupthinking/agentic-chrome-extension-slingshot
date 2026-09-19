@@ -3,6 +3,8 @@
 
 const STORAGE_KEYS = {
   GITHUB_TOKEN: "githubToken",
+  GITHUB_REFRESH_TOKEN: "githubRefreshToken",
+  GITHUB_TOKEN_EXPIRES_AT: "githubTokenExpiresAt",
   VERCEL_TOKEN: "vercelToken",
   XAI_API_KEY: "xaiApiKey",
   GITHUB_USER: "githubUser",
@@ -21,6 +23,8 @@ async function getTokens() {
     chrome.storage.local.get(
       [
         STORAGE_KEYS.GITHUB_TOKEN,
+        STORAGE_KEYS.GITHUB_REFRESH_TOKEN,
+        STORAGE_KEYS.GITHUB_TOKEN_EXPIRES_AT,
         STORAGE_KEYS.VERCEL_TOKEN,
         STORAGE_KEYS.XAI_API_KEY,
         STORAGE_KEYS.GITHUB_USER
@@ -31,9 +35,22 @@ async function getTokens() {
 }
 
 // Helper: Save tokens
-async function saveTokens({ githubToken, vercelToken, xaiApiKey, githubUser }) {
+async function saveTokens({
+  githubToken,
+  githubRefreshToken,
+  githubTokenExpiresAt,
+  vercelToken,
+  xaiApiKey,
+  githubUser
+}) {
   const data = {};
   if (githubToken !== undefined) data[STORAGE_KEYS.GITHUB_TOKEN] = githubToken;
+  if (githubRefreshToken !== undefined) {
+    data[STORAGE_KEYS.GITHUB_REFRESH_TOKEN] = githubRefreshToken;
+  }
+  if (githubTokenExpiresAt !== undefined) {
+    data[STORAGE_KEYS.GITHUB_TOKEN_EXPIRES_AT] = githubTokenExpiresAt;
+  }
   if (vercelToken !== undefined) data[STORAGE_KEYS.VERCEL_TOKEN] = vercelToken;
   if (xaiApiKey !== undefined) data[STORAGE_KEYS.XAI_API_KEY] = xaiApiKey;
   if (githubUser !== undefined) data[STORAGE_KEYS.GITHUB_USER] = githubUser;
@@ -50,6 +67,8 @@ async function clearTokens() {
     chrome.storage.local.remove(
       [
         STORAGE_KEYS.GITHUB_TOKEN,
+        STORAGE_KEYS.GITHUB_REFRESH_TOKEN,
+        STORAGE_KEYS.GITHUB_TOKEN_EXPIRES_AT,
         STORAGE_KEYS.VERCEL_TOKEN,
         STORAGE_KEYS.XAI_API_KEY,
         STORAGE_KEYS.GITHUB_USER,
@@ -92,7 +111,92 @@ async function createCodeChallenge(codeVerifier) {
   return toBase64Url(new Uint8Array(digest));
 }
 
-async function githubRequest(path, { token, method = "GET", body } = {}) {
+function parseOAuthTokenPayload(payloadText) {
+  if (!payloadText) return {};
+  try {
+    return JSON.parse(payloadText);
+  } catch (_err) {
+    return {};
+  }
+}
+
+function toExpiryTimestamp(expiresInSeconds) {
+  const seconds = Number(expiresInSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return new Date(Date.now() + seconds * 1000).toISOString();
+}
+
+function isTokenExpired(expiresAt, leewayMs = 60 * 1000) {
+  if (!expiresAt || typeof expiresAt !== "string") return false;
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) return false;
+  return Date.now() + leewayMs >= expiresAtMs;
+}
+
+async function refreshGitHubTokenFromStorage({ currentToken } = {}) {
+  const tokens = await getTokens();
+  const storedToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
+  const refreshToken = tokens[STORAGE_KEYS.GITHUB_REFRESH_TOKEN];
+
+  if (storedToken && currentToken && storedToken !== currentToken) {
+    return storedToken;
+  }
+
+  if (!refreshToken) {
+    throw new Error("GitHub authentication expired. Please reconnect GitHub.");
+  }
+
+  const clientId = getGitHubClientId();
+  const refreshResponse = await fetch(GITHUB_OAUTH_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken
+    })
+  });
+
+  const refreshPayloadText = await refreshResponse.text();
+  if (!refreshResponse.ok) {
+    throw formatGitHubError(refreshResponse.status, refreshPayloadText, refreshResponse.headers);
+  }
+
+  const refreshPayload = parseOAuthTokenPayload(refreshPayloadText);
+  if (!refreshPayload.access_token) {
+    throw new Error(
+      `GitHub OAuth token refresh failed: ${parseGitHubErrorMessage(refreshPayloadText)}`
+    );
+  }
+
+  await saveTokens({
+    githubToken: refreshPayload.access_token,
+    githubRefreshToken: refreshPayload.refresh_token || refreshToken,
+    githubTokenExpiresAt: toExpiryTimestamp(refreshPayload.expires_in)
+  });
+
+  return refreshPayload.access_token;
+}
+
+async function getValidGitHubToken() {
+  const tokens = await getTokens();
+  const githubToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
+  if (!githubToken) {
+    throw new Error("GitHub is not connected.");
+  }
+
+  const expiresAt = tokens[STORAGE_KEYS.GITHUB_TOKEN_EXPIRES_AT];
+  if (!isTokenExpired(expiresAt)) {
+    return githubToken;
+  }
+
+  return refreshGitHubTokenFromStorage({ currentToken: githubToken });
+}
+
+async function githubRequest(path, { token, method = "GET", body, allowStoredRefresh = false } = {}) {
   const headers = {
     Accept: "application/vnd.github+json"
   };
@@ -112,6 +216,16 @@ async function githubRequest(path, { token, method = "GET", body } = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401 && allowStoredRefresh) {
+      const refreshedToken = await refreshGitHubTokenFromStorage({ currentToken: token });
+      return githubRequest(path, {
+        token: refreshedToken,
+        method,
+        body,
+        allowStoredRefresh: false
+      });
+    }
+
     const errorText = await response.text();
     throw formatGitHubError(response.status, errorText, response.headers);
   }
@@ -331,7 +445,7 @@ async function connectGitHubOAuth() {
     throw formatGitHubError(tokenResponse.status, tokenPayloadText, tokenResponse.headers);
   }
 
-  const tokenPayload = tokenPayloadText ? JSON.parse(tokenPayloadText) : {};
+  const tokenPayload = parseOAuthTokenPayload(tokenPayloadText);
   if (!tokenPayload.access_token) {
     throw new Error(
       `GitHub OAuth token exchange failed: ${parseGitHubErrorMessage(tokenPayloadText)}`
@@ -343,6 +457,8 @@ async function connectGitHubOAuth() {
 
   await saveTokens({
     githubToken: tokenPayload.access_token,
+    githubRefreshToken: tokenPayload.refresh_token,
+    githubTokenExpiresAt: toExpiryTimestamp(tokenPayload.expires_in),
     githubUser
   });
 
@@ -350,7 +466,10 @@ async function connectGitHubOAuth() {
 }
 
 async function resolveRepositoryBranch({ token, owner, repo, branch }) {
-  const repository = await githubRequest(`/repos/${owner}/${repo}`, { token });
+  const repository = await githubRequest(`/repos/${owner}/${repo}`, {
+    token,
+    allowStoredRefresh: true
+  });
   const targetBranch = branch || repository.default_branch;
   if (!targetBranch) {
     throw new Error("Could not determine a target branch for GitHub.");
@@ -371,7 +490,8 @@ async function getLatestCommitForBranch({ token, owner, repo, branch }) {
   });
   const encodedBranch = targetBranch.split("/").map(encodeURIComponent).join("/");
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodedBranch}`, {
-    token
+    token,
+    allowStoredRefresh: true
   });
   const commitSha = ref?.object?.sha;
   if (!commitSha) {
@@ -435,12 +555,8 @@ async function getVercelProject({ token, project, teamId, teamSlug }) {
 
 async function createVercelDeployment({ owner, repo, branch, project, teamId, teamSlug }) {
   const tokens = await getTokens();
-  const githubToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
+  const githubToken = await getValidGitHubToken();
   const vercelToken = tokens[STORAGE_KEYS.VERCEL_TOKEN];
-
-  if (!githubToken) {
-    throw new Error("GitHub is not connected.");
-  }
 
   if (!vercelToken) {
     throw new Error("Vercel is not linked. Save a Vercel access token first.");
@@ -551,7 +667,8 @@ async function commitFilesToGitHub({
   });
   const encodedBranch = targetBranch.split("/").map(encodeURIComponent).join("/");
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodedBranch}`, {
-    token
+    token,
+    allowStoredRefresh: true
   });
   const parentCommitSha = ref?.object?.sha;
   if (!parentCommitSha) {
@@ -560,7 +677,7 @@ async function commitFilesToGitHub({
 
   const parentCommit = await githubRequest(
     `/repos/${owner}/${repo}/git/commits/${parentCommitSha}`,
-    { token }
+    { token, allowStoredRefresh: true }
   );
   const baseTreeSha = parentCommit?.tree?.sha;
   if (!baseTreeSha) {
@@ -573,6 +690,7 @@ async function commitFilesToGitHub({
     const blob = await githubRequest(`/repos/${owner}/${repo}/git/blobs`, {
       token,
       method: "POST",
+      allowStoredRefresh: true,
       body: {
         content: file.content,
         encoding: "utf-8"
@@ -594,6 +712,7 @@ async function commitFilesToGitHub({
   const newTree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
     token,
     method: "POST",
+    allowStoredRefresh: true,
     body: {
       base_tree: baseTreeSha,
       tree
@@ -603,6 +722,7 @@ async function commitFilesToGitHub({
   const newCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
     token,
     method: "POST",
+    allowStoredRefresh: true,
     body: {
       message: commitMessage,
       tree: newTree.sha,
@@ -613,6 +733,7 @@ async function commitFilesToGitHub({
   await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodedBranch}`, {
     token,
     method: "PATCH",
+    allowStoredRefresh: true,
     body: {
       sha: newCommit.sha,
       force: false
@@ -635,11 +756,7 @@ async function autoCommitGeneratedCode({
   conversation,
   plan
 }) {
-  const tokens = await getTokens();
-  const githubToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
-  if (!githubToken) {
-    throw new Error("GitHub is not connected.");
-  }
+  const githubToken = await getValidGitHubToken();
 
   const normalizedOwner = (owner || "").trim();
   const normalizedRepo = (repo || "").trim();
@@ -727,10 +844,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.type) {
         case "GET_AUTH_STATUS": {
           const tokens = await getTokens();
+          const githubToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
+          const githubTokenExpiresAt = tokens[STORAGE_KEYS.GITHUB_TOKEN_EXPIRES_AT] || null;
+          const githubTokenRefreshAvailable = Boolean(tokens[STORAGE_KEYS.GITHUB_REFRESH_TOKEN]);
+          const githubTokenExpired = Boolean(githubToken) && isTokenExpired(githubTokenExpiresAt);
           sendResponse({
-            githubConnected: Boolean(tokens[STORAGE_KEYS.GITHUB_TOKEN]),
+            githubConnected: Boolean(githubToken),
             vercelConnected: Boolean(tokens[STORAGE_KEYS.VERCEL_TOKEN]),
-            githubUser: tokens[STORAGE_KEYS.GITHUB_USER] || null
+            xaiConnected: Boolean(tokens[STORAGE_KEYS.XAI_API_KEY]),
+            githubUser: tokens[STORAGE_KEYS.GITHUB_USER] || null,
+            githubTokenExpiresAt,
+            githubTokenRefreshAvailable,
+            githubTokenExpired
           });
           break;
         }
@@ -774,10 +899,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
 
-        case "GET_TOKENS": {
-          // Only return tokens to trusted extension pages
+        case "GET_XAI_STATUS": {
           const tokens = await getTokens();
-          sendResponse(tokens);
+          sendResponse({
+            hasXaiApiKey: Boolean(tokens[STORAGE_KEYS.XAI_API_KEY])
+          });
           break;
         }
 
