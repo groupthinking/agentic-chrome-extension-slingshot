@@ -1,6 +1,6 @@
 # Agentic Builder — Chrome Extension
 
-## Current Status (Issue #1 + #3 + #5 Implemented)
+## Current Status (Issue #1 + #3 + #4 + #5 Implemented)
 
 - Secure token vault using `chrome.storage.local`
 - Auth status bar in the popup
@@ -10,6 +10,8 @@
 - Live editable agent diagram in popup (drag nodes, create/reconnect/delete edges, rename nodes)
 - Diagram export as `JSON` and `Mermaid` (`.mmd`)
 - Auto-commit generated CrewAI/LangGraph-style scaffold files to a selected GitHub repository
+- Vercel token linking plus one-click deployment of the latest committed branch
+- Deployment status polling with live URL feedback in the popup
 - Clear GitHub API error handling for 404, rate limits, and permission errors
 - Clean message-passing architecture between popup and service worker
 
@@ -66,10 +68,24 @@
 5. Confirm commit message is generated from conversation context and plan use-case.
 6. Verify user-facing errors for missing repo/path (`404`), rate limit (`403`), and missing permissions (`403`).
 
+## Testing Vercel Deploy
+
+1. Generate a plan and complete **Commit to GitHub** successfully.
+2. Click **Link Vercel** and paste a Vercel access token if one is not already saved.
+3. Click **Deploy to Vercel**.
+4. On first deploy, provide the Vercel project name or ID and optional team slug / `team_` ID.
+5. Confirm the popup reports deployment progress (`queued`, `building`, etc.) and eventually prints the live URL.
+6. Click **Deploy to Vercel** again and confirm it reuses the saved project/team target without prompting again.
+7. Verify user-facing errors for:
+   - missing Vercel token
+   - missing Vercel project / wrong team scope (`404`)
+   - wrong branch or repo not linked in Vercel project settings (`400`)
+   - authentication / permission failures (`401` / `403`)
+
 ## Open Issues
 
 - [#1](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/1) Chat / Voice Funneling ✅ core implemented
 - [#2](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/2) React Flow Diagram
 - [#3](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/3) GitHub OAuth + Auto Commit ✅
-- [#4](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4) Vercel One-Click Deploy
+- [#4](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4) Vercel One-Click Deploy ✅
 - [#5](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/5) Secure Token Vault ✅ (foundation done)
