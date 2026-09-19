@@ -48,8 +48,8 @@ flowchart TD
   P --> B[background.js service worker]
   B --> S[chrome.storage.local]
   B --> G[xAI API]
-  P --> GH[GitHub API /user]
-  P -. planned .-> V[Vercel deploy integration]
+  P --> GH[GitHub commit flow]
+  P --> V[Vercel deploy integration]
   P --> D[Diagram + Export JSON/Mermaid]
 ```
 
@@ -75,7 +75,7 @@ flowchart TD
 - [#1 Chat / Voice Funneling](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/1)
 - [#2 React Flow Diagram](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/2)
 - [#3 GitHub OAuth + Commit](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/3)
-- [#4 Vercel One-Click Deploy](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4)
+- [#4 Vercel One-Click Deploy](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/4) ✅
 - [#5 Secure Token Vault](https://github.com/groupthinking/agentic-chrome-extension-slingshot/issues/5)
 
 ## Quick Start — Extension

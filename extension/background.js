@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
 };
 
 const GITHUB_API_BASE = "https://api.github.com";
+const VERCEL_API_BASE = "https://api.vercel.com";
 const GITHUB_OAUTH_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_OAUTH_SCOPES = ["repo", "read:user"];
@@ -166,6 +167,93 @@ function parseGitHubErrorMessage(errorText) {
   return errorText.slice(0, 300);
 }
 
+function parseVercelErrorMessage(errorText) {
+  if (!errorText) return "Unknown Vercel error.";
+  try {
+    const parsed = JSON.parse(errorText);
+    if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    if (typeof parsed?.error?.code === "string") return parsed.error.code;
+    if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch (_err) {
+    // Keep raw text fallback when the payload is not JSON.
+  }
+
+  return errorText.slice(0, 300);
+}
+
+function formatVercelError(status, errorText) {
+  const parsedMessage = parseVercelErrorMessage(errorText);
+
+  if (status === 401) {
+    return new Error("Vercel authentication failed. Please relink your Vercel token.");
+  }
+
+  if (status === 403) {
+    return new Error("Vercel access denied. Check your token scope and team access.");
+  }
+
+  if (status === 404) {
+    return new Error("Vercel project or deployment not found. Check the project name and team scope.");
+  }
+
+  if (status === 429) {
+    return new Error("Vercel rate limit exceeded. Please retry shortly.");
+  }
+
+  if (status === 400) {
+    if (/git|repository|linked/i.test(parsedMessage)) {
+      return new Error(
+        "Vercel project is not linked to this GitHub repository. Link the repo in Vercel project settings first."
+      );
+    }
+
+    if (/branch|ref/i.test(parsedMessage)) {
+      return new Error("Vercel rejected the selected branch. Check the branch name and project settings.");
+    }
+  }
+
+  return new Error(`Vercel API error (${status}): ${parsedMessage}`);
+}
+
+function buildVercelUrl(path, { teamId, teamSlug } = {}) {
+  const url = new URL(`${VERCEL_API_BASE}${path}`);
+  if (teamId) {
+    url.searchParams.set("teamId", teamId);
+  } else if (teamSlug) {
+    url.searchParams.set("slug", teamSlug);
+  }
+  return url.toString();
+}
+
+async function vercelRequest(path, { token, method = "GET", body, teamId, teamSlug } = {}) {
+  const headers = {
+    Accept: "application/json"
+  };
+
+  if (token) {
+    headers.Authorization = "Bearer " + token;
+  }
+
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(buildVercelUrl(path, { teamId, teamSlug }), {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw formatVercelError(response.status, errorText);
+  }
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : {};
+}
+
 function normalizeRelativePath(path) {
   return (path || "")
     .replace(/\\/g, "/")
@@ -261,6 +349,171 @@ async function connectGitHubOAuth() {
   return { githubUser };
 }
 
+async function resolveRepositoryBranch({ token, owner, repo, branch }) {
+  const repository = await githubRequest(`/repos/${owner}/${repo}`, { token });
+  const targetBranch = branch || repository.default_branch;
+  if (!targetBranch) {
+    throw new Error("Could not determine a target branch for GitHub.");
+  }
+
+  return {
+    repository,
+    branch: targetBranch
+  };
+}
+
+async function getLatestCommitForBranch({ token, owner, repo, branch }) {
+  const { branch: targetBranch } = await resolveRepositoryBranch({
+    token,
+    owner,
+    repo,
+    branch
+  });
+  const encodedBranch = targetBranch.split("/").map(encodeURIComponent).join("/");
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodedBranch}`, {
+    token
+  });
+  const commitSha = ref?.object?.sha;
+  if (!commitSha) {
+    throw new Error("Could not determine the latest commit SHA for branch.");
+  }
+
+  return {
+    branch: targetBranch,
+    commitSha
+  };
+}
+
+function normalizeDeploymentUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  return value.startsWith("http") ? value : `https://${value}`;
+}
+
+function normalizeVercelDeployment(deployment) {
+  const readyState = deployment?.readyState || deployment?.state || "UNKNOWN";
+  const primaryAlias = Array.isArray(deployment?.alias) ? deployment.alias[0] : null;
+  const liveUrl = normalizeDeploymentUrl(primaryAlias || deployment?.url || null);
+  return {
+    deploymentId: deployment?.id || null,
+    deploymentName: deployment?.name || null,
+    readyState,
+    liveUrl,
+    inspectorUrl: normalizeDeploymentUrl(deployment?.inspectorUrl || null),
+    errorMessage:
+      deployment?.errorMessage ||
+      deployment?.aliasError?.message ||
+      deployment?.error?.message ||
+      null
+  };
+}
+
+function normalizeVercelScope({ teamId, teamSlug }) {
+  const normalizedTeamId = (teamId || "").trim();
+  const normalizedTeamSlug = (teamSlug || "").trim();
+  if (normalizedTeamId && normalizedTeamSlug) {
+    throw new Error("Provide either a Vercel team ID or team slug, not both.");
+  }
+
+  return {
+    teamId: normalizedTeamId,
+    teamSlug: normalizedTeamSlug
+  };
+}
+
+async function getVercelProject({ token, project, teamId, teamSlug }) {
+  const normalizedProject = (project || "").trim();
+  if (!normalizedProject) {
+    throw new Error("Vercel project name or ID is required.");
+  }
+
+  return vercelRequest(`/v9/projects/${encodeURIComponent(normalizedProject)}`, {
+    token,
+    teamId,
+    teamSlug
+  });
+}
+
+async function createVercelDeployment({ owner, repo, branch, project, teamId, teamSlug }) {
+  const tokens = await getTokens();
+  const githubToken = tokens[STORAGE_KEYS.GITHUB_TOKEN];
+  const vercelToken = tokens[STORAGE_KEYS.VERCEL_TOKEN];
+
+  if (!githubToken) {
+    throw new Error("GitHub is not connected.");
+  }
+
+  if (!vercelToken) {
+    throw new Error("Vercel is not linked. Save a Vercel access token first.");
+  }
+
+  const normalizedOwner = (owner || "").trim();
+  const normalizedRepo = (repo || "").trim();
+  if (!normalizedOwner || !normalizedRepo) {
+    throw new Error("Repository owner and name are required for deployment.");
+  }
+
+  const scope = normalizeVercelScope({ teamId, teamSlug });
+  const latestCommit = await getLatestCommitForBranch({
+    token: githubToken,
+    owner: normalizedOwner,
+    repo: normalizedRepo,
+    branch: (branch || "").trim()
+  });
+  const projectDetails = await getVercelProject({
+    token: vercelToken,
+    project,
+    teamId: scope.teamId,
+    teamSlug: scope.teamSlug
+  });
+
+  const deployment = await vercelRequest("/v13/deployments", {
+    token: vercelToken,
+    method: "POST",
+    teamId: scope.teamId,
+    teamSlug: scope.teamSlug,
+    body: {
+      name: projectDetails?.name || (project || "").trim(),
+      project: projectDetails?.id || (project || "").trim(),
+      gitSource: {
+        type: "github",
+        org: normalizedOwner,
+        repo: normalizedRepo,
+        ref: latestCommit.branch,
+        sha: latestCommit.commitSha
+      }
+    }
+  });
+
+  return {
+    project: projectDetails?.name || (project || "").trim(),
+    branch: latestCommit.branch,
+    commitSha: latestCommit.commitSha,
+    ...normalizeVercelDeployment(deployment)
+  };
+}
+
+async function getVercelDeploymentStatus({ deploymentId, teamId, teamSlug }) {
+  const tokens = await getTokens();
+  const vercelToken = tokens[STORAGE_KEYS.VERCEL_TOKEN];
+  if (!vercelToken) {
+    throw new Error("Vercel is not linked. Save a Vercel access token first.");
+  }
+
+  const normalizedDeploymentId = (deploymentId || "").trim();
+  if (!normalizedDeploymentId) {
+    throw new Error("Deployment ID is required.");
+  }
+
+  const scope = normalizeVercelScope({ teamId, teamSlug });
+  const deployment = await vercelRequest(`/v13/deployments/${encodeURIComponent(normalizedDeploymentId)}`, {
+    token: vercelToken,
+    teamId: scope.teamId,
+    teamSlug: scope.teamSlug
+  });
+
+  return normalizeVercelDeployment(deployment);
+}
+
 function generateCommitMessage({ conversation = [], plan }) {
   const lastUserPrompt = [...conversation]
     .reverse()
@@ -290,12 +543,12 @@ async function commitFilesToGitHub({
   files,
   commitMessage
 }) {
-  const repository = await githubRequest(`/repos/${owner}/${repo}`, { token });
-  const targetBranch = branch || repository.default_branch;
-  if (!targetBranch) {
-    throw new Error("Could not determine a target branch for commit.");
-  }
-
+  const { branch: targetBranch } = await resolveRepositoryBranch({
+    token,
+    owner,
+    repo,
+    branch
+  });
   const encodedBranch = targetBranch.split("/").map(encodeURIComponent).join("/");
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodedBranch}`, {
     token
@@ -544,6 +797,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             commitSha: result.commitSha,
             commitUrl: result.commitUrl,
             commitMessage: result.commitMessage
+          });
+          break;
+        }
+
+        case "CREATE_VERCEL_DEPLOYMENT": {
+          const result = await createVercelDeployment({
+            owner: message.owner,
+            repo: message.repo,
+            branch: message.branch,
+            project: message.project,
+            teamId: message.teamId,
+            teamSlug: message.teamSlug
+          });
+          sendResponse({
+            success: true,
+            ...result
+          });
+          break;
+        }
+
+        case "GET_VERCEL_DEPLOYMENT_STATUS": {
+          const result = await getVercelDeploymentStatus({
+            deploymentId: message.deploymentId,
+            teamId: message.teamId,
+            teamSlug: message.teamSlug
+          });
+          sendResponse({
+            success: true,
+            ...result
           });
           break;
         }

@@ -33,11 +33,17 @@ h1 {
 #auth-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
   padding: 8px 12px;
   background: #161b22;
   border-bottom: 1px solid #30363d;
   font-size: 12px;
+}
+
+#auth-status {
+  flex: 1;
+  line-height: 1.4;
 }
 
 #auth-status.connected {
@@ -46,6 +52,13 @@ h1 {
 
 #auth-status.disconnected {
   color: #f85149;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .auth-actions button {

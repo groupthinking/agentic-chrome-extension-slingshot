@@ -8,6 +8,7 @@ const commitBtn = document.getElementById("commit-btn");
 const deployBtn = document.getElementById("deploy-btn");
 const authStatusEl = document.getElementById("auth-status");
 const connectGithubBtn = document.getElementById("connect-github");
+const connectVercelBtn = document.getElementById("connect-vercel");
 const disconnectBtn = document.getElementById("disconnect-btn");
 const diagramPlaceholderEl = document.getElementById("react-flow-placeholder");
 const diagramNodesEl = document.getElementById("diagram-nodes");
@@ -30,8 +31,13 @@ let graphState = {
 };
 let dragState = null;
 let isGitHubConnected = false;
+let isVercelConnected = false;
 let latestGeneratedPlan = null;
 let conversationHistory = [];
+let latestCommitContext = null;
+let lastVercelTarget = null;
+let deploymentPollHandle = null;
+let activeDeploymentId = null;
 
 function normalizeConversationRole(role) {
   if (role === "You" || role === "Voice") return "user";
@@ -63,6 +69,51 @@ function addMessage(role, text) {
 
 function updateCommitButtonState() {
   commitBtn.disabled = !isGitHubConnected || !latestGeneratedPlan;
+}
+
+function updateDeployButtonState() {
+  deployBtn.disabled = !isGitHubConnected || !latestCommitContext || Boolean(activeDeploymentId);
+}
+
+function clearDeploymentPoll() {
+  if (deploymentPollHandle) {
+    clearTimeout(deploymentPollHandle);
+    deploymentPollHandle = null;
+  }
+  activeDeploymentId = null;
+  updateDeployButtonState();
+}
+
+function normalizeUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  return value.startsWith("http") ? value : `https://${value}`;
+}
+
+function parseVercelScopeInput(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return { teamId: "", teamSlug: "", scopeLabel: "" };
+  }
+
+  if (/^team_/i.test(normalized)) {
+    return { teamId: normalized, teamSlug: "", scopeLabel: normalized };
+  }
+
+  return { teamId: "", teamSlug: normalized, scopeLabel: normalized };
+}
+
+function formatDeploymentStatusMessage(status) {
+  const state = status?.readyState || "UNKNOWN";
+  if (state === "READY") {
+    return `Deployment ready: ${normalizeUrl(status.liveUrl) || "Live URL unavailable."}`;
+  }
+
+  if (state === "ERROR" || state === "CANCELED" || state === "BLOCKED") {
+    const details = status?.errorMessage ? ` ${status.errorMessage}` : "";
+    return `Deployment ${state.toLowerCase()}.${details}`.trim();
+  }
+
+  return `Deployment status: ${state.toLowerCase()}...`;
 }
 
 function extractJsonObject(text) {
@@ -477,6 +528,8 @@ if (exportMermaidBtn) {
 
 function renderPlan(plan) {
   latestGeneratedPlan = plan;
+  latestCommitContext = null;
+  clearDeploymentPoll();
   const lines = [
     `Industry: ${plan.industry}`,
     `Use case: ${plan.useCase}`,
@@ -495,6 +548,7 @@ function renderPlan(plan) {
   addMessage("Plan", lines.join(" "));
   setGraphFromPlan(plan);
   updateCommitButtonState();
+  updateDeployButtonState();
 }
 
 async function sendRuntimeMessage(message) {
@@ -522,6 +576,61 @@ async function ensureXaiToken() {
   });
 
   return Boolean(saveResponse?.success);
+}
+
+async function ensureVercelToken() {
+  const authState = await refreshAuthStatus();
+  if (authState?.vercelConnected) return true;
+
+  const token = prompt("Paste your Vercel access token to enable one-click deploys:");
+  if (!token || !token.trim()) return false;
+
+  const saveResponse = await sendRuntimeMessage({
+    type: "SAVE_VERCEL_TOKEN",
+    token: token.trim()
+  });
+
+  if (!saveResponse?.success) {
+    addMessage("System", `Vercel link failed: ${saveResponse?.error || "Unknown error"}`);
+    return false;
+  }
+
+  addMessage("System", "Vercel access token saved.");
+  await refreshAuthStatus();
+  return true;
+}
+
+function pollDeploymentStatus({ deploymentId, teamId, teamSlug, lastState = "" }) {
+  deploymentPollHandle = window.setTimeout(async () => {
+    const response = await sendRuntimeMessage({
+      type: "GET_VERCEL_DEPLOYMENT_STATUS",
+      deploymentId,
+      teamId,
+      teamSlug
+    });
+
+    if (!response?.success) {
+      addMessage("System", `Deployment status check failed: ${response?.error || "Unknown error"}`);
+      clearDeploymentPoll();
+      return;
+    }
+
+    if (response.readyState !== lastState) {
+      addMessage("System", formatDeploymentStatusMessage(response));
+    }
+
+    if (["READY", "ERROR", "CANCELED", "BLOCKED"].includes(response.readyState)) {
+      clearDeploymentPoll();
+      return;
+    }
+
+    pollDeploymentStatus({
+      deploymentId,
+      teamId,
+      teamSlug,
+      lastState: response.readyState
+    });
+  }, 4000);
 }
 
 async function generateAgentPlanFromInput(text) {
@@ -559,7 +668,6 @@ async function generateAgentPlanFromInput(text) {
     }
 
     renderPlan(plan);
-    deployBtn.disabled = false;
   } finally {
     isSendingPlan = false;
     sendBtn.disabled = false;
@@ -752,20 +860,22 @@ async function refreshAuthStatus() {
         return;
       }
 
-      if (response?.githubConnected) {
-        isGitHubConnected = true;
-        authStatusEl.textContent = `Connected as ${response.githubUser || "GitHub user"}`;
-        authStatusEl.className = "connected";
-        connectGithubBtn.style.display = "none";
-        disconnectBtn.style.display = "inline-block";
-      } else {
-        isGitHubConnected = false;
-        authStatusEl.textContent = "Not connected";
-        authStatusEl.className = "disconnected";
-        connectGithubBtn.style.display = "inline-block";
-        disconnectBtn.style.display = "none";
+      isGitHubConnected = Boolean(response?.githubConnected);
+      isVercelConnected = Boolean(response?.vercelConnected);
+      const githubLabel = isGitHubConnected
+        ? `GitHub @${response.githubUser || "user"}`
+        : "GitHub not connected";
+      const vercelLabel = isVercelConnected ? "Vercel linked" : "Vercel not linked";
+
+      authStatusEl.textContent = `${githubLabel} • ${vercelLabel}`;
+      authStatusEl.className = isGitHubConnected ? "connected" : "disconnected";
+      connectGithubBtn.style.display = isGitHubConnected ? "none" : "inline-block";
+      if (connectVercelBtn) {
+        connectVercelBtn.textContent = isVercelConnected ? "Relink Vercel" : "Link Vercel";
       }
+      disconnectBtn.style.display = isGitHubConnected || isVercelConnected ? "inline-block" : "none";
       updateCommitButtonState();
+      updateDeployButtonState();
 
       resolve(response);
     });
@@ -789,9 +899,19 @@ connectGithubBtn?.addEventListener("click", async () => {
   }
 });
 
+connectVercelBtn?.addEventListener("click", async () => {
+  connectVercelBtn.disabled = true;
+  try {
+    await ensureVercelToken();
+  } finally {
+    connectVercelBtn.disabled = false;
+  }
+});
+
 disconnectBtn?.addEventListener("click", () => {
   chrome.runtime.sendMessage({ type: "DISCONNECT_ALL" }, async () => {
-    addMessage("System", "Disconnected from GitHub");
+    clearDeploymentPoll();
+    addMessage("System", "Disconnected from GitHub and Vercel.");
     await refreshAuthStatus();
   });
 });
@@ -862,10 +982,93 @@ commitBtn.addEventListener("click", async () => {
     "System",
     `Committed to ${owner}/${repo}@${response.branch} (${response.commitSha.slice(0, 7)}): ${response.commitMessage}`
   );
+  latestCommitContext = {
+    owner,
+    repo,
+    branch: response.branch,
+    basePath: basePathInput.trim(),
+    commitSha: response.commitSha
+  };
+  updateDeployButtonState();
 });
 
-deployBtn.addEventListener("click", () => {
-  addMessage("System", "Vercel deploy flow → see Issue #4");
+deployBtn.addEventListener("click", async () => {
+  if (!latestCommitContext) {
+    addMessage("System", "Commit the generated files to GitHub before deploying to Vercel.");
+    return;
+  }
+
+  const hasVercelToken = await ensureVercelToken();
+  if (!hasVercelToken) {
+    addMessage("System", "Vercel access token is required to deploy.");
+    return;
+  }
+
+  let deploymentTarget = lastVercelTarget;
+  if (!deploymentTarget) {
+    const projectInput = prompt("Vercel project name or ID:", latestCommitContext.repo);
+    if (projectInput === null) return;
+
+    const project = projectInput.trim();
+    if (!project) {
+      addMessage("System", "Vercel project name or ID is required.");
+      return;
+    }
+
+    const scopeInput = prompt(
+      "Optional Vercel team slug or team_ ID (leave blank for your personal account):",
+      ""
+    );
+    if (scopeInput === null) return;
+
+    deploymentTarget = {
+      project,
+      ...parseVercelScopeInput(scopeInput)
+    };
+    lastVercelTarget = deploymentTarget;
+  }
+
+  activeDeploymentId = "starting";
+  updateDeployButtonState();
+  addMessage(
+    "System",
+    `Starting Vercel deployment for ${deploymentTarget.project} from ${latestCommitContext.owner}/${latestCommitContext.repo}@${latestCommitContext.branch}...`
+  );
+
+  const response = await sendRuntimeMessage({
+    type: "CREATE_VERCEL_DEPLOYMENT",
+    owner: latestCommitContext.owner,
+    repo: latestCommitContext.repo,
+    branch: latestCommitContext.branch,
+    project: deploymentTarget.project,
+    teamId: deploymentTarget.teamId,
+    teamSlug: deploymentTarget.teamSlug
+  });
+
+  if (!response?.success) {
+    clearDeploymentPoll();
+    addMessage("System", `Vercel deploy failed: ${response?.error || "Unknown error"}`);
+    return;
+  }
+
+  activeDeploymentId = response.deploymentId || null;
+  updateDeployButtonState();
+  addMessage(
+    "System",
+    `Deployment created from commit ${response.commitSha.slice(0, 7)}. ${formatDeploymentStatusMessage(response)}`
+  );
+
+  if (!activeDeploymentId || ["READY", "ERROR", "CANCELED", "BLOCKED"].includes(response.readyState)) {
+    clearDeploymentPoll();
+    return;
+  }
+
+  pollDeploymentStatus({
+    deploymentId: activeDeploymentId,
+    teamId: deploymentTarget.teamId,
+    teamSlug: deploymentTarget.teamSlug,
+    lastState: response.readyState
+  });
 });
 
 // Init
