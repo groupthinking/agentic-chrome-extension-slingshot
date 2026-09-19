@@ -70,13 +70,10 @@ function getGitHubClientId() {
 }
 
 function randomString(length = 64) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  let value = "";
-  for (const byte of bytes) {
-    value += chars[byte % chars.length];
-  }
-  return value;
+  if (length <= 0) return "";
+  const byteLength = Math.ceil((length * 3) / 4) + 8;
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return toBase64Url(bytes).slice(0, length);
 }
 
 function toBase64Url(bytes) {

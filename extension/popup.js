@@ -619,6 +619,13 @@ function toSlug(value) {
     .slice(0, 48);
 }
 
+function escapeDoubleQuoted(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, "\\n");
+}
+
 function buildGeneratedFilesFromPlan(plan) {
   const safeUseCase = toSlug(plan.useCase) || "agent-system";
   const title = `${plan.useCase} (${plan.industry})`;
@@ -657,13 +664,13 @@ AGENTS = [
 ${plan.agents
   .map(
     (agent) =>
-      `    {"name": "${agent.name.replace(/"/g, '\\"')}", "role": "${agent.role.replace(/"/g, '\\"')}", "goal": "${agent.goal.replace(/"/g, '\\"')}"}`
+      `    {"name": "${escapeDoubleQuoted(agent.name)}", "role": "${escapeDoubleQuoted(agent.role)}", "goal": "${escapeDoubleQuoted(agent.goal)}"}`
   )
   .join(",\n")}
 ]
 
 WORKFLOW_STEPS = [
-${plan.workflowSteps.map((step) => `    "${step.replace(/"/g, '\\"')}"`).join(",\n")}
+${plan.workflowSteps.map((step) => `    "${escapeDoubleQuoted(step)}"`).join(",\n")}
 ]
 
 def run():
@@ -682,7 +689,7 @@ if __name__ == "__main__":
 
 NODES = [
 ${plan.agents
-  .map((agent) => `    "${agent.name.replace(/"/g, '\\"')}"`)
+  .map((agent) => `    "${escapeDoubleQuoted(agent.name)}"`)
   .join(",\n")}
 ]
 
@@ -691,7 +698,7 @@ ${graphState.edges
   .map((edge) => {
     const source = graphState.nodes.find((node) => node.id === edge.source)?.name || edge.source;
     const target = graphState.nodes.find((node) => node.id === edge.target)?.name || edge.target;
-    return `    ("${source.replace(/"/g, '\\"')}", "${target.replace(/"/g, '\\"')}")`;
+    return `    ("${escapeDoubleQuoted(source)}", "${escapeDoubleQuoted(target)}")`;
   })
   .join(",\n")}
 ]
