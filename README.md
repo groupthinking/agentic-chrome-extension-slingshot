@@ -85,6 +85,15 @@ flowchart TD
 3. Select the `extension/` folder
 4. Open the popup and start typing
 
+## PR Workflow: E2E + Recording + Parent Issue
+
+When opening a PR:
+
+1. Run a manual end-to-end click-through of the popup flow(s) changed by your PR.
+2. Record the click-through and add the recording URL in the PR template.
+3. Set a parent issue in the PR template (`Parent: #<number>`).
+4. If more work is discovered, open a **PR Follow-up Work Item** issue and set the same parent issue there.
+
 ## Philosophy
 
 Start with a working shell, then fill in the high-RICE features one by one. Security and auth first, then the fun parts.

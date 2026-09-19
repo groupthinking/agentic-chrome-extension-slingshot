@@ -1,0 +1,40 @@
+name: PR Follow-up Work Item
+description: Create work required by a pull request and link it to a parent issue.
+title: "[Follow-up] "
+labels:
+  - follow-up
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for work discovered during PR review/testing.
+  - type: input
+    id: parent_issue
+    attributes:
+      label: Parent issue number
+      description: Add the parent issue as `#<number>`.
+      placeholder: "#13"
+    validations:
+      required: true
+  - type: input
+    id: related_pr
+    attributes:
+      label: Related pull request
+      description: Link the PR that discovered or requires this work.
+      placeholder: "https://github.com/groupthinking/agentic-chrome-extension-slingshot/pull/<number>"
+    validations:
+      required: true
+  - type: textarea
+    id: work_required
+    attributes:
+      label: Work required
+      description: Describe the required work and expected outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include end-to-end validation criteria and recording expectations when applicable.
+    validations:
+      required: true
