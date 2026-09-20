@@ -6,11 +6,13 @@ body:
     attributes:
       value: |
         Use this for work discovered during PR review/testing.
+        
+        GitHub issue forms only require non-empty values here. Maintainers must still verify that the parent issue uses `#<number>` and the related pull request points to the correct PR.
   - type: input
     id: parent_issue
     attributes:
       label: Parent issue number
-      description: Add the parent issue as `#<number>`.
+      description: Add the parent issue as `#<number>` (maintainer-reviewed; not auto-validated by GitHub issue forms).
       placeholder: "#13"
     validations:
       required: true
@@ -18,7 +20,7 @@ body:
     id: related_pr
     attributes:
       label: Related pull request
-      description: Link the PR that discovered or requires this work.
+      description: Link the PR that discovered or requires this work (maintainer-reviewed; not auto-validated by GitHub issue forms).
       placeholder: "https://github.com/groupthinking/agentic-chrome-extension-slingshot/pull/<number>"
     validations:
       required: true
