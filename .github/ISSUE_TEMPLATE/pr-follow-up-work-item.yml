@@ -1,8 +1,6 @@
 name: PR Follow-up Work Item
 description: Create work required by a pull request and link it to a parent issue.
 title: "[Follow-up] "
-labels:
-  - follow-up
 body:
   - type: markdown
     attributes:
